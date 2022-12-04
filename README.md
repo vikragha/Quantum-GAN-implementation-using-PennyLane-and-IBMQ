@@ -1,4 +1,9 @@
 # Quantum-GAN-implementation-using-PennyLane-and-IBMQ
 
+# reference paper: https://arxiv.org/abs/1805.11973
 
-<to be updated soon>
+Refer Junde's repo: https://github.com/jundeli/quantum-gan
+
+Refer DeCao's repo: https://github.com/nicola-decao/MolGAN
+
+this repo was created to fix some code issues and test with more information. 
