@@ -1,6 +1,7 @@
 # Quantum-GAN-implementation-using-PennyLane-and-IBMQ
 
-# reference paper: https://arxiv.org/abs/1805.11973
+# Reference paper: https://arxiv.org/abs/1805.11973
+# Reference paper: https://arxiv.org/abs/1805.11973
 
 Refer Junde's repo: https://github.com/jundeli/quantum-gan
 
