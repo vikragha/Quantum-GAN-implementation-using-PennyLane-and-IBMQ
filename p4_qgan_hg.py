@@ -35,7 +35,16 @@ from rdkit import Chem
 def str2bool(v):
     return v.lower() in ('true')
 
-dev = qml.device('default.qubit', wires=2)
+qubits = 2
+# Set up your ibmq credentials first from https://quantum-computing.ibm.com/
+demo_on_ibmq = True
+#here we are using default device provided by pennylane
+if demo_on_ibmq:
+    dev = qml.device('qiskit.ibmq', wires=2, backend='ibmq_manila',
+                 ibmqx_token='c87ce3ffb49c6ed9da89699416a6f26df7b887eefeb0e0e45048417e260ebd184078c73657eb357a31214d016cb1c562133f142714723da220f8b302e918b88f', hub='ibm-q-education', group='cornell-uni-2', project='fa22-phys-4481')
+else:
+    dev = qml.device('default.qubit', wires=qubits)
+
 @qml.qnode(dev, interface='torch')
 def gen_circuit_1(w):
     # random noise as generator input
