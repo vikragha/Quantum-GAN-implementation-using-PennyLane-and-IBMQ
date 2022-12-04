@@ -304,6 +304,12 @@ def main(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
+        # Quantum circuit configuration
+    parser.add_argument('--quantum', type=bool, default=True, help='choose to use quantum gan with hybrid generator')
+    parser.add_argument('--patches', type=int, default=1, help='number of quantum circuit patches')
+    parser.add_argument('--layer', type=int, default=1, help='number of repeated variational quantum layer')
+    parser.add_argument('--qubits', type=int, default=4, help='number of qubits and dimension of domain labels')
+ 
     # Model configuration.
     parser.add_argument('--z_dim', type=int, default=8, help='dimension of domain labels')
     parser.add_argument('--g_conv_dim', default=[128], help='number of conv filters in the first layer of G')
