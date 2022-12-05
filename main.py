@@ -201,6 +201,10 @@ def main(config):
             # Logging.
             loss['G/loss_fake'] = g_loss_fake.item()
             loss['G/loss_value'] = g_loss_value.item()
+            loss['FD/fd_bond_only'] = fd_bond_only
+            loss['FD/fd_bond_atom'] = fd_bond_atom
+            print('g_loss:{}, d_loss:{}, fd_bond_only:{}, fd_bond_atom:{}'.format(g_loss.item(), \
+                                                                                  d_loss.item(), fd_bond_only, fd_bond_atom))
 
         # =================================================================================== #
         #                                 4. Miscellaneous                                    #
