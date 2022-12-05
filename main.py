@@ -159,7 +159,46 @@ def main(config):
             g_loss.backward(retain_graph=True)
             self.g_optimizer.step()
             
-                        # Logging.
+            R=[list(a[i].reshape(-1))  for i in range(self.batch_size)] #list(x[i]) + 
+            F=[list(edges_hard[i].reshape(-1))  for i in range(self.batch_size)] #list(nodes_hard[i]) + 
+            fd_bond_only = frdist(R, F)
+            
+            R=[list(x[i]) + list(a[i].reshape(-1))  for i in range(self.batch_size)]
+            F=[list(nodes_hard[i]) + list(edges_hard[i].reshape(-1))  for i in range(self.batch_size)]
+            fd_bond_atom = frdist(R, F)
+            
+            # Saving model checkpoint with lowest FD score
+            if "fd_bond_atom_min" not in locals():
+                fd_bond_atom_min = 30
+            if fd_bond_atom_min > fd_bond_atom:
+                if "lowest_ind" not in locals():
+                    lowest_ind = 0
+
+                if os.path.exists(os.path.join(self.model_save_dir, '{}-G.ckpt'.format(lowest_ind))):
+                    os.remove(os.path.join(self.model_save_dir, '{}-G.ckpt'.format(lowest_ind)))
+                    os.remove(os.path.join(self.model_save_dir, '{}-D.ckpt'.format(lowest_ind)))
+                    os.remove(os.path.join(self.model_save_dir, '{}-V.ckpt'.format(lowest_ind)))
+
+                lowest_ind = i+1
+                fd_bond_atom_min = fd_bond_atom
+
+                G_path = os.path.join(self.model_save_dir, '{}-G.ckpt'.format(i+1))
+                D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(i+1))
+                V_path = os.path.join(self.model_save_dir, '{}-V.ckpt'.format(i+1))
+                torch.save(self.G.state_dict(), G_path)
+                torch.save(self.D.state_dict(), D_path)
+                torch.save(self.V.state_dict(), V_path)
+
+                with open('p_qgan_hg_15p/models/p_qgan_hg_15p_red_weights.csv', 'a') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([i+1] + list(gen_weights.detach().numpy()))
+                with open('p_qgan_hg_15p/models/lowest_indices.csv', 'a') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([i+1] + [fd_bond_atom]) 
+            
+            
+            
+            # Logging.
             loss['G/loss_fake'] = g_loss_fake.item()
             loss['G/loss_value'] = g_loss_value.item()
 
