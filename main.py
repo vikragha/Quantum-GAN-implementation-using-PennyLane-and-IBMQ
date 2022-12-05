@@ -225,7 +225,10 @@ def main(config):
                 log += ", {}: {:.4f}".format(tag, value)
             print(log)
 
-            
+            with open('p_qgan_hg_15p/results/q8_metric_scores_log.csv', 'a') as file:
+                writer = csv.writer(file)
+                writer.writerow([i+1, et]+[torch.mean(rewardR).item(), torch.mean(rewardF).item()]+\
+                               [value for tag, value in loss.items()])
             if self.use_tensorboard or True:
                 for tag, value in loss.items():
                     self.logger.scalar_summary(tag, value, i+1)
@@ -239,6 +242,9 @@ def main(config):
             torch.save(self.G.state_dict(), G_path)
             torch.save(self.D.state_dict(), D_path)
             torch.save(self.V.state_dict(), V_path)
+            with open('p_qgan_hg_15p/models/q8_weights.csv', 'a') as file:
+                writer = csv.writer(file)
+                writer.writerow([i+1] + list(gen_weights.detach().numpy()))
             print('Saved model checkpoints into {}...'.format(self.model_save_dir))
 
         # Decay learning rates.
