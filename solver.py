@@ -390,3 +390,4 @@ class Solver(object):
             m0.update(m1)
             for tag, value in m0.items():
                 log += ", {}: {:.4f}".format(tag, value)
+                
