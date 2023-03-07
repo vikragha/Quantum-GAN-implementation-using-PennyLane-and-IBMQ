@@ -37,7 +37,7 @@ def str2bool(v):
 
 qubits = 2
 # Set up your ibmq credentials first from https://quantum-computing.ibm.com/
-demo_on_ibmq = True
+demo_on_ibmq = False
 #here we are using default device provided by pennylane
 if demo_on_ibmq:
     dev = qml.device('qiskit.ibmq', wires=2, backend='ibmq_manila',
