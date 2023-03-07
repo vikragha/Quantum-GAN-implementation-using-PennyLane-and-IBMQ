@@ -2,10 +2,11 @@
 
 This work uses Pytorch, PennyLane and Qiskit to generate new molecules
 
-# Reference paper: https://arxiv.org/abs/1805.11973
-# Reference paper: https://arxiv.org/abs/1805.11973
+Reference paper: https://arxiv.org/abs/1805.11973 
 
-Refer DeCao's repo: https://github.com/nicola-decao/MolGAN
+Reference paper: https://arxiv.org/abs/1805.11973
+
+Refer DeCao's repo: https://github.com/nicola-decao/MolGAN for baseline
 
 this repo was created to fix some code issues and implement statitical analysis for circuit design and energy consumption. 
 
