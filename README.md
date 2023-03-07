@@ -1,4 +1,4 @@
-# Quantum-GAN-implementation 
+# Quantum-GAN-implementation (Classical data and discriminator, Quantum Generator)
 
 This work uses Pytorch, PennyLane and Qiskit to generate new molecules
 
@@ -10,7 +10,6 @@ Refer DeCao's repo: https://github.com/nicola-decao/MolGAN for baseline
 
 this repo was created to fix some code issues and implement statitical analysis for circuit design and energy consumption. 
 
-Examples:
 # installations
 !pip install frechetdist
 
