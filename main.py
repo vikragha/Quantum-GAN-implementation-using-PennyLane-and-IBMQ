@@ -30,6 +30,8 @@ from utils import *
 from models import Generator, Discriminator
 from data.sparse_molecular_dataset import SparseMolecularDataset
 from rdkit import Chem
+import qiskit
+import qiskit.providers.aer.noise as noise
 
 
 def str2bool(v):
@@ -51,13 +53,206 @@ def main(config):
         os.makedirs(config.result_dir)
 
     # Solver for training and testing StarGAN.
-    solver = Solver(config)
+    self = Solver(config)
+    from logger import Logger
+    self.logger = Logger(self.log_dir)
 
-    if config.mode == 'train':
-        solver.train()
-    elif config.mode == 'test':
-        solver.test()
+    # Learning rate cache for decaying.
+    g_lr = self.g_lr
+    d_lr = self.d_lr
+    if config.quantum:
+        gen_weights = torch.tensor(list(np.random.rand(config.layer*(config.qubits*2-1))*2*np.pi-np.pi), requires_grad=True)
+        #Nelder Mead optimizer
+#        self.g_optimizer = torch.optim.SGD(list(self.G.parameters())+list(self.V.parameters())+[gen_weights],lr=self.g_lr, momentum=0, nesterov=False)
+        #ADAM optimizer
+        self.g_optimizer = torch.optim.Adam(list(self.G.parameters())+list(self.V.parameters())+[gen_weights], self.g_lr, [self.beta1, self.beta2])
 
+    # Start training from scratch or resume training.
+    start_iters = 0
+    if self.resume_iters:
+        start_iters = self.resume_iters
+        self.restore_model(self.resume_iters)
+
+    # Start training.
+    print('Start training...')
+    start_time = time.time()
+    for i in range(start_iters, self.num_iters):
+        mols, _, _, a, x, _, _, _, _ = self.data.next_train_batch(self.batch_size)
+
+        # =================================================================================== #
+        #                             1. Preprocess input data                                #
+        # =================================================================================== #
+
+        a = torch.from_numpy(a).to(self.device).long()            # Adjacency.
+        x = torch.from_numpy(x).to(self.device).long()            # Nodes.
+        a_tensor = self.label2onehot(a, self.b_dim)
+        x_tensor = self.label2onehot(x, self.m_dim)
+        
+        if config.quantum:
+            sample_list = [gen_circuit(gen_weights) for i in range(self.batch_size)]
+            z = torch.stack(tuple(sample_list)).to(self.device).float()
+        else:
+            z = self.sample_z(self.batch_size)
+            z = torch.from_numpy(z).to(self.device).float()
+
+        # =================================================================================== #
+        #                             2. Train the discriminator                              #
+        # =================================================================================== #
+
+        # Compute loss with real images.
+        logits_real, features_real = self.D(a_tensor, None, x_tensor)
+        d_loss_real = - torch.mean(logits_real)
+
+        # Compute loss with fake images.
+        edges_logits, nodes_logits = self.G(z)
+        # Postprocess with Gumbel softmax
+        (edges_hat, nodes_hat) = self.postprocess((edges_logits, nodes_logits), self.post_method)
+        logits_fake, features_fake = self.D(edges_hat, None, nodes_hat)
+        d_loss_fake = torch.mean(logits_fake)
+
+        # Compute loss for gradient penalty.
+        eps = torch.rand(logits_real.size(0),1,1,1).to(self.device)
+        x_int0 = (eps * a_tensor + (1. - eps) * edges_hat).requires_grad_(True)
+        x_int1 = (eps.squeeze(-1) * x_tensor + (1. - eps.squeeze(-1)) * nodes_hat).requires_grad_(True)
+        grad0, grad1 = self.D(x_int0, None, x_int1)
+        d_loss_gp = self.gradient_penalty(grad0, x_int0) + self.gradient_penalty(grad1, x_int1)
+
+
+        # Backward and optimize.
+        d_loss = d_loss_fake + d_loss_real + self.lambda_gp * d_loss_gp
+        self.reset_grad()
+        d_loss.backward(retain_graph=True)
+        self.d_optimizer.step()
+
+        # Logging.
+        loss = {}
+        loss['D/loss_real'] = d_loss_real.item()
+        loss['D/loss_fake'] = d_loss_fake.item()
+        loss['D/loss_gp'] = d_loss_gp.item()
+
+        # =================================================================================== #
+        #                               3. Train the generator                                #
+        # =================================================================================== #
+
+        if (i+1) % self.n_critic == 0:
+            # Z-to-target
+            edges_logits, nodes_logits = self.G(z)
+            # Postprocess with Gumbel softmax
+            (edges_hat, nodes_hat) = self.postprocess((edges_logits, nodes_logits), self.post_method)
+            logits_fake, features_fake = self.D(edges_hat, None, nodes_hat)
+            g_loss_fake = - torch.mean(logits_fake)
+
+            # Real Reward
+            rewardR = torch.from_numpy(self.reward(mols)).to(self.device)
+            # Fake Reward
+            (edges_hard, nodes_hard) = self.postprocess((edges_logits, nodes_logits), 'hard_gumbel')
+            edges_hard, nodes_hard = torch.max(edges_hard, -1)[1], torch.max(nodes_hard, -1)[1]
+            mols = [self.data.matrices2mol(n_.data.cpu().numpy(), e_.data.cpu().numpy(), strict=True)
+                    for e_, n_ in zip(edges_hard, nodes_hard)]
+            rewardF = torch.from_numpy(self.reward(mols)).to(self.device)
+
+            # Value loss
+            value_logit_real,_ = self.V(a_tensor, None, x_tensor, torch.sigmoid)
+            value_logit_fake,_ = self.V(edges_hat, None, nodes_hat, torch.sigmoid)
+            g_loss_value = torch.mean((value_logit_real - rewardR) ** 2 + (
+                                       value_logit_fake - rewardF) ** 2)
+
+            # Backward and optimize.
+            g_loss = g_loss_fake + g_loss_value
+            self.reset_grad()
+            g_loss.backward(retain_graph=True)
+            self.g_optimizer.step()
+            
+            R=[list(a[i].reshape(-1))  for i in range(self.batch_size)] #list(x[i]) + 
+            F=[list(edges_hard[i].reshape(-1))  for i in range(self.batch_size)] #list(nodes_hard[i]) + 
+            fd_bond_only = frdist(R, F)
+            
+            R=[list(x[i]) + list(a[i].reshape(-1))  for i in range(self.batch_size)]
+            F=[list(nodes_hard[i]) + list(edges_hard[i].reshape(-1))  for i in range(self.batch_size)]
+            fd_bond_atom = frdist(R, F)
+            
+            # Saving model checkpoint with lowest FD score
+            if "fd_bond_atom_min" not in locals():
+                fd_bond_atom_min = 30
+            if fd_bond_atom_min > fd_bond_atom:
+                if "lowest_ind" not in locals():
+                    lowest_ind = 0
+
+                if os.path.exists(os.path.join(self.model_save_dir, '{}-G.ckpt'.format(lowest_ind))):
+                    os.remove(os.path.join(self.model_save_dir, '{}-G.ckpt'.format(lowest_ind)))
+                    os.remove(os.path.join(self.model_save_dir, '{}-D.ckpt'.format(lowest_ind)))
+                    os.remove(os.path.join(self.model_save_dir, '{}-V.ckpt'.format(lowest_ind)))
+
+                lowest_ind = i+1
+                fd_bond_atom_min = fd_bond_atom
+
+                G_path = os.path.join(self.model_save_dir, '{}-G.ckpt'.format(i+1))
+                D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(i+1))
+                V_path = os.path.join(self.model_save_dir, '{}-V.ckpt'.format(i+1))
+                torch.save(self.G.state_dict(), G_path)
+                torch.save(self.D.state_dict(), D_path)
+                torch.save(self.V.state_dict(), V_path)
+
+                with open(os.path.join(self.model_save_dir, 'molgan_red_weights.csv'), 'a') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([i+1] + list(gen_weights.detach().numpy()))
+                with open(os.path.join(self.model_save_dir, 'lowest_indices.csv'), 'a') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([i+1] + [fd_bond_atom])
+
+            # Logging.
+            loss['G/loss_fake'] = g_loss_fake.item()
+            loss['G/loss_value'] = g_loss_value.item()
+            loss['FD/fd_bond_only'] = fd_bond_only
+            loss['FD/fd_bond_atom'] = fd_bond_atom
+            print('g_loss:{}, d_loss:{}, fd_bond_only:{}, fd_bond_atom:{}'.format(g_loss.item(), \
+                                                                                  d_loss.item(), fd_bond_only, fd_bond_atom))
+
+        # =================================================================================== #
+        #                                 4. Miscellaneous                                    #
+        # =================================================================================== #
+
+        # Print out training information.
+        if (i+1) % self.log_step == 0:
+            et = time.time() - start_time
+            et = str(datetime.timedelta(seconds=et))[:-7]
+            log = "Elapsed [{}], Iteration [{}/{}]".format(et, i+1, self.num_iters)
+
+            # Log update
+            m0, m1 = all_scores(mols, self.data, norm=True)     # 'mols' is output of Fake Reward
+            m0 = {k: np.array(v)[np.nonzero(v)].mean() for k, v in m0.items()}
+            m0.update(m1)
+            loss.update(m0)
+            for tag, value in loss.items():
+                log += ", {}: {:.4f}".format(tag, value)
+            print(log)
+
+            with open('p_qgan_hg_15p/results/q8_metric_scores_log.csv', 'a') as file:
+                writer = csv.writer(file)
+                writer.writerow([i+1, et]+[torch.mean(rewardR).item(), torch.mean(rewardF).item()]+\
+                               [value for tag, value in loss.items()])
+
+            if self.use_tensorboard or True:
+                for tag, value in loss.items():
+                    self.logger.scalar_summary(tag, value, i+1)
+
+
+        # Save model checkpoints.
+        if (i+1) % self.model_save_step == 0:
+            G_path = os.path.join(self.model_save_dir, '{}-G.ckpt'.format(i+1))
+            D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(i+1))
+            V_path = os.path.join(self.model_save_dir, '{}-V.ckpt'.format(i+1))
+            torch.save(self.G.state_dict(), G_path)
+            torch.save(self.D.state_dict(), D_path)
+            torch.save(self.V.state_dict(), V_path)
+            print('Saved model checkpoints into {}...'.format(self.model_save_dir))
+
+        # Decay learning rates.
+        if (i+1) % self.lr_update_step == 0 and (i+1) > (self.num_iters - self.num_iters_decay):
+            g_lr -= (self.g_lr / float(self.num_iters_decay))
+            d_lr -= (self.d_lr / float(self.num_iters_decay))
+            self.update_lr(g_lr, d_lr)
+            print ('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
 
 if __name__ == '__main__':
@@ -82,8 +277,8 @@ if __name__ == '__main__':
 
     # Training configuration.
     parser.add_argument('--batch_size', type=int, default=16, help='mini-batch size')
-    parser.add_argument('--num_iters', type=int, default=500, help='number of total iterations for training D')
-    parser.add_argument('--num_iters_decay', type=int, default=250, help='number of iterations for decaying lr')
+    parser.add_argument('--num_iters', type=int, default=5000, help='number of total iterations for training D')
+    parser.add_argument('--num_iters_decay', type=int, default=2500, help='number of iterations for decaying lr')
     parser.add_argument('--g_lr', type=float, default=0.0001, help='learning rate for G')
     parser.add_argument('--d_lr', type=float, default=0.0001, help='learning rate for D')
     parser.add_argument('--dropout', type=float, default=0., help='dropout rate')
@@ -93,7 +288,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_iters', type=int, default=None, help='resume training from this step')
 
     # Test configuration.
-    parser.add_argument('--test_iters', type=int, default=500, help='test model from this step')
+    parser.add_argument('--test_iters', type=int, default=5000, help='test model from this step')
 
     # Miscellaneous.
     parser.add_argument('--num_workers', type=int, default=1)
@@ -102,16 +297,16 @@ if __name__ == '__main__':
 
     # Directories.
     parser.add_argument('--mol_data_dir', type=str, default='data/gdb9_9nodes.sparsedataset')
-    parser.add_argument('--log_dir', type=str, default='molgan/logs')
-    parser.add_argument('--model_save_dir', type=str, default='molgan/models')
-    parser.add_argument('--sample_dir', type=str, default='molgan/samples')
-    parser.add_argument('--result_dir', type=str, default='molgan/results')
+    parser.add_argument('--log_dir', type=str, default='p_qgan_hg_15p/logs')
+    parser.add_argument('--model_save_dir', type=str, default='p_qgan_hg_15p/models')
+    parser.add_argument('--sample_dir', type=str, default='p_qgan_hg_15p/samples')
+    parser.add_argument('--result_dir', type=str, default='p_qgan_hg_15p/results')
 
     # Step size.
     parser.add_argument('--log_step', type=int, default=10)
-    parser.add_argument('--sample_step', type=int, default=100)
-    parser.add_argument('--model_save_step', type=int, default=100)
-    parser.add_argument('--lr_update_step', type=int, default=50)
+    parser.add_argument('--sample_step', type=int, default=1000)
+    parser.add_argument('--model_save_step', type=int, default=1000)
+    parser.add_argument('--lr_update_step', type=int, default=500)
 
     config = parser.parse_args()
     if config.complexity == 'mr':
@@ -134,24 +329,24 @@ if __name__ == '__main__':
     dev = qml.device('default.qubit', wires=config.qubits)
     @qml.qnode(dev, interface='torch')
     def gen_circuit(w):
-        # random noise as generator input
+    # random noise as generator input
         z1 = random.uniform(-1, 1)
         z2 = random.uniform(-1, 1)
-
-        # construct generator circuit for both atom vector and node matrix
+   
+    # construct generator circuit for both atom vector and node matrix
         for i in range(config.qubits):
             qml.RY(np.arcsin(z1), wires=i)
             qml.RZ(np.arcsin(z2), wires=i)
+       
+       
         for l in range(config.layer):
             for i in range(config.qubits):
-                qml.RY(w[i], wires=i)
-
+                qml.RX(w[i], wires = i)
+                qml.RZ(w[i], wires = i)
             for i in range(config.qubits-1):
-                qml.CNOT(wires=[i, i+1])
-                qml.RZ(w[i+config.qubits], wires=i+1)
-                qml.CNOT(wires=[i, i+1])
+                qml.CNOT(wires=[i+1, i])
         return [qml.expval(qml.PauliZ(i)) for i in range(config.qubits)]
 
-    assert config.patches == 1, "Please try patched quantum gan with using 'p2_qgan_hg.py' or 'p4_qgan_hg.py'!"
+    assert config.patches == 1, "Please try patched quantum gan with using 'p2_qgan_hg_15p.py' or 'p4_qgan_hg_15p.py'!"
     
     main(config)
