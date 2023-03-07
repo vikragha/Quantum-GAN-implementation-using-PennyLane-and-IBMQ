@@ -62,7 +62,7 @@ def main(config):
     d_lr = self.d_lr
     if config.quantum:
         gen_weights = torch.tensor(list(np.random.rand(config.layer*(config.qubits*2-1))*2*np.pi-np.pi), requires_grad=True)
-        #Nelder Mead optimizer
+        #SDG optimizer
 #        self.g_optimizer = torch.optim.SGD(list(self.G.parameters())+list(self.V.parameters())+[gen_weights],lr=self.g_lr, momentum=0, nesterov=False)
         #ADAM optimizer
         self.g_optimizer = torch.optim.Adam(list(self.G.parameters())+list(self.V.parameters())+[gen_weights], self.g_lr, [self.beta1, self.beta2])
@@ -326,6 +326,7 @@ if __name__ == '__main__':
         
     print(config)
     
+    #Circuit2
     dev = qml.device('default.qubit', wires=config.qubits)
     @qml.qnode(dev, interface='torch')
     def gen_circuit(w):
