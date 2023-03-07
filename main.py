@@ -227,7 +227,7 @@ def main(config):
                 log += ", {}: {:.4f}".format(tag, value)
             print(log)
 
-            with open('p_qgan_hg_15p/results/q8_metric_scores_log.csv', 'a') as file:
+            with open('qgan-hg-nr-q8-l2/results/q8_metric_scores_log.csv', 'a') as file:
                 writer = csv.writer(file)
                 writer.writerow([i+1, et]+[torch.mean(rewardR).item(), torch.mean(rewardF).item()]+\
                                [value for tag, value in loss.items()])
