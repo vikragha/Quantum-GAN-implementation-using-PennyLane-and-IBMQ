@@ -227,7 +227,7 @@ def main(config):
                 log += ", {}: {:.4f}".format(tag, value)
             print(log)
 
-            with open('qgan-hg-nr-q8-l2/results/q8_metric_scores_log.csv', 'a') as file:
+            with open(os.path.join(self.result_dir, 'metric_scores_log.csv'), 'a') as file:
                 writer = csv.writer(file)
                 writer.writerow([i+1, et]+[torch.mean(rewardR).item(), torch.mean(rewardF).item()]+\
                                [value for tag, value in loss.items()])
@@ -326,27 +326,27 @@ if __name__ == '__main__':
         
     print(config)
     
-    #Circuit2
+    #Pennylane Circuit ID 3
     dev = qml.device('default.qubit', wires=config.qubits)
     @qml.qnode(dev, interface='torch')
     def gen_circuit(w):
     # random noise as generator input
-        z1 = random.uniform(-1, 1)
-        z2 = random.uniform(-1, 1)
-   
+      z1 = random.uniform(-1, 1)
+      z2 = random.uniform(-1, 1)
+
     # construct generator circuit for both atom vector and node matrix
-        for i in range(config.qubits):
-            qml.RY(np.arcsin(z1), wires=i)
-            qml.RZ(np.arcsin(z2), wires=i)
-       
-       
-        for l in range(config.layer):
-            for i in range(config.qubits):
-                qml.RX(w[i], wires = i)
-                qml.RZ(w[i], wires = i)
-            for i in range(config.qubits-1):
-                qml.CNOT(wires=[i+1, i])
-        return [qml.expval(qml.PauliZ(i)) for i in range(config.qubits)]
+      for i in range(config.qubits):
+          qml.RY(np.arcsin(z1), wires=i)
+          qml.RZ(np.arcsin(z2), wires=i)
+        
+        
+      for l in range(config.layer):
+          for i in range(config.qubits):
+              qml.RX(w[i], wires = i)
+              qml.RZ(w[i], wires = i)
+          for i in range(config.qubits-1):
+            qml.CRZ(w[i+config.qubits], wires=[i+1, i])
+      return [qml.expval(qml.PauliZ(i)) for i in range(config.qubits)]
 
     assert config.patches == 1, "Please try patched quantum gan with using 'p2_qgan_hg_15p.py' or 'p4_qgan_hg_15p.py'!"
     
