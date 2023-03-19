@@ -36,7 +36,7 @@ class Solver(object):
         self.lambda_gp = config.lambda_gp
         self.post_method = config.post_method
 
-        self.metric = 'validity,sas'
+        self.metric = 'validity,qed'
 
         # Training configurations.
         self.batch_size = config.batch_size
