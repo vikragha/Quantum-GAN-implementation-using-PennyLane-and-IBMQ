@@ -292,6 +292,10 @@ if __name__ == '__main__':
     data.generate('gdb9.sdf', filters=lambda x: x.GetNumAtoms() <= 9)
     data.save('gdb9_9nodes.sparsedataset')
 
-    # data = SparseMolecularDataset()
-    # data.generate('qm9_5k.smi', validation=0.00021, test=0.00021)  # , filters=lambda x: x.GetNumAtoms() <= 9)
-    # data.save('qm9_5k.sparsedataset')
+    #data = SparseMolecularDataset()
+    #data.generate('qm9_5k.smi', validation=0.00021, test=0.00021)  # , filters=lambda x: x.GetNumAtoms() <= 9)
+    #data.save('qm9_5k.sparsedataset')
+    
+    #data = SparseMolecularDataset()
+    #data.generate('ZINC250k.smi', validation=0.00021, test=0.00021)  # , filters=lambda x: x.GetNumAtoms() <= 38)
+    #data.save('ZINC250k.sparsedataset')
