@@ -31,7 +31,7 @@ from models import Generator, Discriminator
 from data.sparse_molecular_dataset import SparseMolecularDataset
 from rdkit import Chem
 import qiskit
-import qiskit.providers.aer.noise as noise
+#import qiskit.providers.aer.noise as noise
 
 
 def str2bool(v):
@@ -89,7 +89,7 @@ def main(config):
         x_tensor = self.label2onehot(x, self.m_dim)
         
         if config.quantum:
-            sample_list = [gen_circuit(gen_weights) for i in range(self.batch_size)]
+            sample_list = [torch.tensor(gen_circuit(gen_weights)) for i in range(self.batch_size)]
             z = torch.stack(tuple(sample_list)).to(self.device).float()
         else:
             z = self.sample_z(self.batch_size)
@@ -276,7 +276,7 @@ if __name__ == '__main__':
     parser.add_argument('--post_method', type=str, default='softmax', choices=['softmax', 'soft_gumbel', 'hard_gumbel'])
 
     # Training configuration.
-    parser.add_argument('--batch_size', type=int, default=16, help='mini-batch size')
+    parser.add_argument('--batch_size', type=int, default=128, help='mini-batch size')
     parser.add_argument('--num_iters', type=int, default=5000, help='number of total iterations for training D')
     parser.add_argument('--num_iters_decay', type=int, default=2500, help='number of iterations for decaying lr')
     parser.add_argument('--g_lr', type=float, default=0.0001, help='learning rate for G')
