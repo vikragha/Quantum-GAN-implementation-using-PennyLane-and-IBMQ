@@ -326,27 +326,27 @@ if __name__ == '__main__':
         
     print(config)
     
-    #Pennylane Circuit ID 3
+    #Baseline Circuit
     dev = qml.device('default.qubit', wires=config.qubits)
     @qml.qnode(dev, interface='torch')
     def gen_circuit(w):
-    # random noise as generator input
-      z1 = random.uniform(-1, 1)
-      z2 = random.uniform(-1, 1)
+        # random noise as generator input
+        z1 = random.uniform(-1, 1)
+        z2 = random.uniform(-1, 1)
 
-    # construct generator circuit for both atom vector and node matrix
-      for i in range(config.qubits):
-          qml.RY(np.arcsin(z1), wires=i)
-          qml.RZ(np.arcsin(z2), wires=i)
-        
-        
-      for l in range(config.layer):
-          for i in range(config.qubits):
-              qml.RX(w[i], wires = i)
-              qml.RZ(w[i], wires = i)
-          for i in range(config.qubits-1):
-            qml.CRZ(w[i+config.qubits], wires=[i+1, i])
-      return [qml.expval(qml.PauliZ(i)) for i in range(config.qubits)]
+        # construct generator circuit for both atom vector and node matrix
+        for i in range(config.qubits):
+            qml.RY(np.arcsin(z1), wires=i)
+            qml.RZ(np.arcsin(z2), wires=i)
+        for l in range(config.layer):
+            for i in range(config.qubits):
+                qml.RY(w[i], wires=i)
+
+            for i in range(config.qubits-1):
+                qml.CNOT(wires=[i, i+1])
+                qml.RZ(w[i+config.qubits], wires=i+1)
+                qml.CNOT(wires=[i, i+1])
+        return [qml.expval(qml.PauliZ(i)) for i in range(config.qubits)]
 
     assert config.patches == 1, "Please try patched quantum gan with using 'p2_qgan_hg_15p.py' or 'p4_qgan_hg_15p.py'!"
     
