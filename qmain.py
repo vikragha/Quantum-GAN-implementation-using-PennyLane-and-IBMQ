@@ -61,12 +61,8 @@ def main(config):
     g_lr = self.g_lr
     d_lr = self.d_lr
     if config.quantum:
-        #baseline
-        gen_weights = torch.tensor(list(np.random.rand(config.layer*(config.qubits*2-1))*2*np.pi-np.pi), requires_grad=True)
         #DOE recommendation
         gen_weights = torch.tensor(np.random.uniform(low=-np.pi, high=np.pi, size=(config.layer, config.qubits)), requires_grad=True)
-        #SDG optimizer
-#        self.g_optimizer = torch.optim.SGD(list(self.G.parameters())+list(self.V.parameters())+[gen_weights],lr=self.g_lr, momentum=0, nesterov=False)
         #ADAM optimizer
         self.g_optimizer = torch.optim.Adam(list(self.G.parameters())+list(self.V.parameters())+[gen_weights], self.g_lr, [self.beta1, self.beta2])
 
