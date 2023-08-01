@@ -37,7 +37,7 @@ def str2bool(v):
 
 qubits = 4
 # Set up your ibmq credentials first from https://quantum-computing.ibm.com/
-demo_on_ibmq = True
+demo_on_ibmq = False
 #here we are using default device provided by pennylane
 if demo_on_ibmq:
     dev = qml.device('qiskit.ibmq', wires=4, backend='ibmq_manila',
@@ -131,7 +131,7 @@ def main(config):
 #         else:
         mols, _, _, a, x, _, _, _, _ = self.data.next_train_batch(self.batch_size)
 #         sample_list = [gen_circuit(gen_weights) for i in range(self.batch_size)]
-        sample_list = [torch.cat([gen_circuit_1(gen_weights), gen_circuit_2(gen_weights)]) for i in range(self.batch_size)]
+        sample_list = [torch.cat([torch.tensor(gen_circuit_1(gen_weights)), torch.tensor(gen_circuit_2(gen_weights))]) for i in range(self.batch_size)]
 #             z = self.sample_z(self.batch_size)
 
         # =================================================================================== #
